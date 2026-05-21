@@ -10,13 +10,12 @@ pub(crate) enum ScreenshotBackend {
     WkWebViewSnapshot,
     CgWindowList,
     ScreencaptureProbe,
-    /// Returned by [`selected_backend`] on hosts where no native capture
-    /// surface is available. Constructed in `cfg(not(target_os = "macos"))`
-    /// builds; matched on macOS so the dispatcher can map it to a
-    /// `PERMISSION_DENIED` IPC error.
+    /// Sentinel matched by the macOS dispatcher to surface a
+    /// `PERMISSION_DENIED` IPC error. Never constructed today; the non-macOS
+    /// IPC branch short-circuits before reaching the probe.
     #[allow(
         dead_code,
-        reason = "constructed in cfg(not(target_os = \"macos\")) builds"
+        reason = "kept for the exhaustive match in the macOS dispatcher"
     )]
     PlatformUnsupported,
 }
@@ -30,37 +29,16 @@ pub(crate) fn selected_backend() -> ScreenshotBackend {
 }
 
 fn probe_backend() -> ScreenshotBackend {
-    #[cfg(target_os = "macos")]
-    {
-        if screencapture_probe_allows_window_capture() {
-            ScreenshotBackend::ScreencaptureProbe
-        } else {
-            ScreenshotBackend::CgWindowList
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        ScreenshotBackend::PlatformUnsupported
+    if screencapture_probe_allows_window_capture() {
+        ScreenshotBackend::ScreencaptureProbe
+    } else {
+        ScreenshotBackend::CgWindowList
     }
 }
 
-#[cfg(target_os = "macos")]
 fn screencapture_probe_allows_window_capture() -> bool {
     std::process::Command::new("screencapture")
         .args(["-l", "0", "/dev/null"])
         .status()
         .is_ok_and(|status| status.success())
-}
-
-#[cfg(test)]
-mod tests {
-    #[cfg(not(target_os = "macos"))]
-    #[test]
-    fn non_macos_backend_is_closed_unsupported_variant() {
-        assert_eq!(
-            super::selected_backend(),
-            super::ScreenshotBackend::PlatformUnsupported
-        );
-    }
 }

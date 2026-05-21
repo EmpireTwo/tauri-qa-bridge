@@ -24,9 +24,7 @@ pub(crate) struct WindowBounds {
 ///
 /// # Errors
 ///
-/// Returns [`ScreenshotError::PlatformUnsupported`] off macOS, and
-/// [`ScreenshotError::CaptureFailed`] when CoreGraphics returns null.
-#[cfg(target_os = "macos")]
+/// Returns [`ScreenshotError::CaptureFailed`] when `CoreGraphics` returns null.
 pub(crate) fn list_layer_zero_windows() -> Result<Vec<DiscoveredWindow>, ScreenshotError> {
     use core_foundation::array::CFArray;
     use core_foundation::base::{CFType, TCFType};
@@ -105,16 +103,6 @@ pub(crate) fn list_layer_zero_windows() -> Result<Vec<DiscoveredWindow>, Screens
     Ok(out)
 }
 
-/// Non-macOS stub for the window-discovery helper.
-///
-/// # Errors
-///
-/// Always returns [`ScreenshotError::PlatformUnsupported`].
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn list_layer_zero_windows() -> Result<Vec<DiscoveredWindow>, ScreenshotError> {
-    Err(ScreenshotError::PlatformUnsupported)
-}
-
 /// Look up the logical bounds of a window by `window_id`.
 ///
 /// Used to derive `scale_factor` for the IPC response by comparing pixel
@@ -122,10 +110,8 @@ pub(crate) fn list_layer_zero_windows() -> Result<Vec<DiscoveredWindow>, Screens
 ///
 /// # Errors
 ///
-/// Returns [`ScreenshotError::PlatformUnsupported`] off macOS, and
-/// [`ScreenshotError::CaptureFailed`] when CoreGraphics returns null or the
-/// window list does not contain `window_id`.
-#[cfg(target_os = "macos")]
+/// Returns [`ScreenshotError::CaptureFailed`] when `CoreGraphics` returns null
+/// or the window list does not contain `window_id`.
 pub(crate) fn get_window_bounds(window_id: u32) -> Result<WindowBounds, ScreenshotError> {
     use core_foundation::array::CFArray;
     use core_foundation::base::{CFType, TCFType};
@@ -187,16 +173,6 @@ pub(crate) fn get_window_bounds(window_id: u32) -> Result<WindowBounds, Screensh
     })
 }
 
-/// Non-macOS stub for the bounds lookup.
-///
-/// # Errors
-///
-/// Always returns [`ScreenshotError::PlatformUnsupported`].
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn get_window_bounds(_window_id: u32) -> Result<WindowBounds, ScreenshotError> {
-    Err(ScreenshotError::PlatformUnsupported)
-}
-
 /// Hard cap on the `available_windows` list returned in `WINDOW_NOT_FOUND`
 /// errors. A host with many open windows can otherwise produce a multi-KB
 /// payload; 20 is enough to spot a typo or wrong owner without bloating the
@@ -211,10 +187,8 @@ pub(crate) const AVAILABLE_WINDOWS_CAP: usize = 20;
 ///
 /// # Errors
 ///
-/// Returns [`ScreenshotError::PlatformUnsupported`] off macOS, and
-/// [`ScreenshotError::CaptureFailed`] when the CoreGraphics window list call
-/// returns null or no layer-0 window matches the filter.
-#[cfg(target_os = "macos")]
+/// Returns [`ScreenshotError::CaptureFailed`] when the `CoreGraphics` window
+/// list call returns null or no layer-0 window matches the filter.
 #[allow(
     dead_code,
     reason = "kept for owner-name lookups in a follow-up milestone"
@@ -297,14 +271,4 @@ pub(crate) fn get_window_id(owner: &str, title: Option<&str>) -> Result<u32, Scr
     Err(ScreenshotError::CaptureFailed {
         message: format!("no layer-0 window matched owner={owner}"),
     })
-}
-
-/// Non-macOS stub for the window-id resolver.
-///
-/// # Errors
-///
-/// Always returns [`ScreenshotError::PlatformUnsupported`].
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn get_window_id(_owner: &str, _title: Option<&str>) -> Result<u32, ScreenshotError> {
-    Err(ScreenshotError::PlatformUnsupported)
 }

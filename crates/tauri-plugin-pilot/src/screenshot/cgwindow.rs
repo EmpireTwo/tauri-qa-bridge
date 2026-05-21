@@ -6,11 +6,9 @@ use super::ScreenshotError;
 ///
 /// # Errors
 ///
-/// Returns [`ScreenshotError::PlatformUnsupported`] off macOS, and
-/// [`ScreenshotError::CaptureFailed`] when CoreGraphics returns no image,
-/// the raw buffer is too small for the reported dimensions, the dimensions do
-/// not fit a `u32`, or the PNG encoder fails to write the file.
-#[cfg(target_os = "macos")]
+/// Returns [`ScreenshotError::CaptureFailed`] when `CoreGraphics` returns no
+/// image, the raw buffer is too small for the reported dimensions, the
+/// dimensions do not fit a `u32`, or the PNG encoder fails to write the file.
 pub(crate) fn capture_cgwindow(window_id: u32, path: &Path) -> Result<(), ScreenshotError> {
     use core_graphics::geometry::{CGPoint, CGRect, CGSize};
     use core_graphics::window::{
@@ -81,14 +79,4 @@ pub(crate) fn capture_cgwindow(window_id: u32, path: &Path) -> Result<(), Screen
             message: format!("write cgwindow png {}: {err}", path.display()),
         }
     })
-}
-
-/// Non-macOS stub for the CGWindow capture path.
-///
-/// # Errors
-///
-/// Always returns [`ScreenshotError::PlatformUnsupported`].
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn capture_cgwindow(_window_id: u32, _path: &Path) -> Result<(), ScreenshotError> {
-    Err(ScreenshotError::PlatformUnsupported)
 }

@@ -9,7 +9,9 @@
 #[cfg(target_os = "macos")]
 use std::path::Path;
 
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(target_os = "macos")]
+use serde_json::json;
 
 use crate::protocol::RpcError;
 
@@ -24,7 +26,15 @@ const RPC_INTERNAL_ERROR: i32 = -32603;
 pub(crate) mod codes {
     pub(crate) const INVALID_OUTPUT_PATH: &str = "INVALID_OUTPUT_PATH";
     pub(crate) const UNSUPPORTED_FORMAT: &str = "UNSUPPORTED_FORMAT";
+    #[cfg_attr(
+        not(target_os = "macos"),
+        allow(dead_code, reason = "only referenced by the macOS capture path")
+    )]
     pub(crate) const WINDOW_NOT_FOUND: &str = "WINDOW_NOT_FOUND";
+    #[cfg_attr(
+        not(target_os = "macos"),
+        allow(dead_code, reason = "only referenced by the macOS capture path")
+    )]
     pub(crate) const CAPTURE_FAILED: &str = "CAPTURE_FAILED";
     pub(crate) const PERMISSION_DENIED: &str = "PERMISSION_DENIED";
 }
@@ -51,6 +61,13 @@ fn rpc_error(rpc_code: i32, domain: &str, message: impl Into<String>, extras: Va
 
 /// Parsed view of the `pilot.screenshot` request params with all field-level
 /// validation already enforced by the validators below.
+#[cfg_attr(
+    not(target_os = "macos"),
+    allow(
+        dead_code,
+        reason = "fields are read by the macOS-only capture pipeline"
+    )
+)]
 struct ScreenshotRequest {
     window_id: u32,
     output_path: std::path::PathBuf,

@@ -11,11 +11,9 @@ use super::ScreenshotError;
 ///
 /// # Errors
 ///
-/// Returns [`ScreenshotError::PlatformUnsupported`] off macOS, and
-/// [`ScreenshotError::CaptureFailed`] when the child process cannot be
-/// spawned or exits with a non-zero status (TCC-denied, unknown window id,
-/// or unwritable output path).
-#[cfg(target_os = "macos")]
+/// Returns [`ScreenshotError::CaptureFailed`] when the child process cannot be
+/// spawned or exits with a non-zero status (TCC-denied, unknown window id, or
+/// unwritable output path).
 pub(crate) fn capture_screencapture(window_id: u32, path: &Path) -> Result<(), ScreenshotError> {
     use std::process::Command;
 
@@ -34,14 +32,4 @@ pub(crate) fn capture_screencapture(window_id: u32, path: &Path) -> Result<(), S
         });
     }
     Ok(())
-}
-
-/// Non-macOS stub for the `screencapture` shell-out path.
-///
-/// # Errors
-///
-/// Always returns [`ScreenshotError::PlatformUnsupported`].
-#[cfg(not(target_os = "macos"))]
-pub(crate) fn capture_screencapture(_window_id: u32, _path: &Path) -> Result<(), ScreenshotError> {
-    Err(ScreenshotError::PlatformUnsupported)
 }
