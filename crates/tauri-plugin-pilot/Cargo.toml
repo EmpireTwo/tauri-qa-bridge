@@ -23,12 +23,14 @@ default = ["press"]
 # release builds where the whole plugin is already no-op'd by
 # `cfg(debug_assertions)`.
 press = ["dep:enigo"]
+tcp-transport = []
 
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["net", "rt", "sync", "time", "io-util"] }
 tracing.workspace = true
+getrandom.workspace = true
 thiserror = "2"
 tauri = { version = "2", features = ["unstable"] }
 enigo = { version = "0.6.1", optional = true }

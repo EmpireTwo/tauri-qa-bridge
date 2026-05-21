@@ -1,3 +1,5 @@
+#[cfg(feature = "tcp-transport")]
+use crate::auth::{AuthToken, Handshake, validate_handshake};
 use crate::error::Error;
 use crate::eval::EvalEngine;
 use crate::handler;
@@ -26,6 +28,8 @@ pub(crate) async fn handle_connection<S>(
     list_fn: Option<&ListWindowsFn>,
     focus_fn: Option<&FocusFn>,
     recorder: &Recorder,
+    #[cfg(feature = "tcp-transport")] auth_token: Option<&AuthToken>,
+    #[cfg(not(feature = "tcp-transport"))] _auth_token: Option<()>,
 ) -> Result<(), Error>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
@@ -35,6 +39,8 @@ where
     let (mut reader, mut writer) = tokio::io::split(stream);
     let mut reader = BufReader::new(&mut reader);
     let mut line = String::new();
+    #[cfg(feature = "tcp-transport")]
+    let mut authenticated = auth_token.is_none();
 
     loop {
         line.clear();
@@ -74,7 +80,28 @@ where
                 -32600,
                 "Invalid JSON-RPC version (expected \"2.0\")",
             ),
-            Ok(req) => dispatch_request(&req, engine, eval_fn, list_fn, focus_fn, recorder).await,
+            Ok(req) => {
+                #[cfg(feature = "tcp-transport")]
+                {
+                    if !authenticated {
+                        let token =
+                            auth_token.expect("auth token is present while unauthenticated");
+                        match validate_handshake(&req, token) {
+                            Handshake::Accepted(response) => {
+                                authenticated = true;
+                                response
+                            }
+                            Handshake::Rejected(response) => response,
+                        }
+                    } else {
+                        dispatch_request(&req, engine, eval_fn, list_fn, focus_fn, recorder).await
+                    }
+                }
+                #[cfg(not(feature = "tcp-transport"))]
+                {
+                    dispatch_request(&req, engine, eval_fn, list_fn, focus_fn, recorder).await
+                }
+            }
             Err(e) => Response::error(serde_json::Value::Null, -32700, format!("Parse error: {e}")),
         };
 

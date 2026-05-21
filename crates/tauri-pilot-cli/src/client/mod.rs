@@ -74,6 +74,15 @@ impl Client {
         // and `set -e` keep working. See #48.
         Ok(response.result.unwrap_or(serde_json::Value::Null))
     }
+
+    pub async fn authenticate(&mut self, token: String) -> Result<()> {
+        self.call(
+            "auth.handshake",
+            Some(serde_json::json!({ "token": token })),
+        )
+        .await?;
+        Ok(())
+    }
 }
 
 #[cfg(unix)]

@@ -159,6 +159,8 @@ pub async fn run(
     list_fn: Option<ListWindowsFn>,
     focus_fn: Option<FocusFn>,
     recorder: Recorder,
+    #[cfg(feature = "tcp-transport")] auth_token: Option<crate::auth::AuthToken>,
+    #[cfg(not(feature = "tcp-transport"))] auth_token: Option<()>,
 ) {
     let listener = match UnixListener::from_std(listener) {
         Ok(l) => l,
@@ -167,7 +169,11 @@ pub async fn run(
             return;
         }
     };
-    if let Err(e) = accept_loop(listener, engine, eval_fn, list_fn, focus_fn, recorder).await {
+    if let Err(e) = accept_loop(
+        listener, engine, eval_fn, list_fn, focus_fn, recorder, auth_token,
+    )
+    .await
+    {
         tracing::error!("socket server error: {e}");
     }
 }
@@ -179,8 +185,10 @@ async fn accept_loop(
     list_fn: Option<ListWindowsFn>,
     focus_fn: Option<FocusFn>,
     recorder: Recorder,
+    #[cfg(feature = "tcp-transport")] auth_token: Option<crate::auth::AuthToken>,
+    #[cfg(not(feature = "tcp-transport"))] auth_token: Option<()>,
 ) -> Result<(), Error> {
-    let ctx = Arc::new((engine, eval_fn, list_fn, focus_fn, recorder));
+    let ctx = Arc::new((engine, eval_fn, list_fn, focus_fn, recorder, auth_token));
 
     loop {
         let (stream, _addr) = match listener.accept().await {
@@ -219,6 +227,10 @@ async fn accept_loop(
                 ctx.2.as_ref(),
                 ctx.3.as_ref(),
                 &ctx.4,
+                #[cfg(feature = "tcp-transport")]
+                ctx.5.as_ref(),
+                #[cfg(not(feature = "tcp-transport"))]
+                None,
             )
             .await
             {
@@ -252,7 +264,17 @@ mod tests {
         let (listener, guard) = bind(path).expect("bind test socket");
         let engine = EvalEngine::new();
         let handle = tokio::spawn(async move {
-            run(listener, guard, engine, None, None, None, Recorder::new()).await;
+            run(
+                listener,
+                guard,
+                engine,
+                None,
+                None,
+                None,
+                Recorder::new(),
+                None,
+            )
+            .await;
         });
         tokio::time::sleep(Duration::from_millis(50)).await;
         handle

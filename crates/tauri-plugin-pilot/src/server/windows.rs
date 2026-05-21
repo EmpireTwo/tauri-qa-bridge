@@ -429,6 +429,8 @@ pub async fn run(
     list_fn: Option<ListWindowsFn>,
     focus_fn: Option<FocusFn>,
     recorder: Recorder,
+    #[cfg(feature = "tcp-transport")] auth_token: Option<crate::auth::AuthToken>,
+    #[cfg(not(feature = "tcp-transport"))] auth_token: Option<()>,
 ) {
     let identifier = guard.identifier.clone();
     if let Err(e) = accept_loop(
@@ -439,6 +441,7 @@ pub async fn run(
         list_fn,
         focus_fn,
         recorder,
+        auth_token,
     )
     .await
     {
@@ -454,8 +457,10 @@ async fn accept_loop(
     list_fn: Option<ListWindowsFn>,
     focus_fn: Option<FocusFn>,
     recorder: Recorder,
+    #[cfg(feature = "tcp-transport")] auth_token: Option<crate::auth::AuthToken>,
+    #[cfg(not(feature = "tcp-transport"))] auth_token: Option<()>,
 ) -> Result<(), Error> {
-    let ctx = Arc::new((engine, eval_fn, list_fn, focus_fn, recorder));
+    let ctx = Arc::new((engine, eval_fn, list_fn, focus_fn, recorder, auth_token));
     let mut server = first_server;
     let pipe_path = socket_path(identifier);
 
@@ -516,6 +521,10 @@ async fn accept_loop(
                 ctx.2.as_ref(),
                 ctx.3.as_ref(),
                 &ctx.4,
+                #[cfg(feature = "tcp-transport")]
+                ctx.5.as_ref(),
+                #[cfg(not(feature = "tcp-transport"))]
+                None,
             )
             .await
             {
@@ -547,7 +556,17 @@ mod tests {
         let (listener, guard) = bind(path).expect("bind test pipe");
         let engine = EvalEngine::new();
         let handle = tokio::spawn(async move {
-            run(listener, guard, engine, None, None, None, Recorder::new()).await;
+            run(
+                listener,
+                guard,
+                engine,
+                None,
+                None,
+                None,
+                Recorder::new(),
+                None,
+            )
+            .await;
         });
         tokio::time::sleep(Duration::from_millis(50)).await;
         handle

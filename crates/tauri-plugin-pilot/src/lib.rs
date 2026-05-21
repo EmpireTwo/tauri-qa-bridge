@@ -1,3 +1,5 @@
+#[cfg(all(any(unix, windows), debug_assertions, feature = "tcp-transport"))]
+mod auth;
 pub mod diff;
 mod error;
 #[cfg(any(unix, windows))]
@@ -67,6 +69,15 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 
                 let recorder = Recorder::new();
 
+                #[cfg(feature = "tcp-transport")]
+                let auth_token = Some(auth::AuthToken::create(&identifier).map_err(|e| {
+                    tracing::error!("failed to create auth token: {e}");
+                    e
+                })?);
+
+                #[cfg(not(feature = "tcp-transport"))]
+                let auth_token = None;
+
                 tauri::async_runtime::spawn(server::run(
                     listener,
                     guard,
@@ -75,6 +86,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
                     Some(list_fn),
                     Some(focus_fn),
                     recorder,
+                    auth_token,
                 ));
 
                 Ok(())

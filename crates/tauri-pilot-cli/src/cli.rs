@@ -8,6 +8,10 @@ pub(crate) struct Cli {
     #[arg(long, env = "TAURI_PILOT_SOCKET")]
     pub socket: Option<PathBuf>,
 
+    /// Auth token. Defaults to the newest pilot.token discovery file.
+    #[arg(long, env = "TAURI_PILOT_TOKEN")]
+    pub token: Option<String>,
+
     /// Output JSON instead of text.
     #[arg(long, global = true)]
     pub json: bool,
