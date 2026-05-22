@@ -175,6 +175,17 @@ fn parse_output_path(obj: &serde_json::Map<String, Value>) -> Result<std::path::
             Value::Null,
         ));
     }
+    if output_path.is_dir() {
+        return Err(rpc_error(
+            RPC_INVALID_PARAMS,
+            codes::INVALID_OUTPUT_PATH,
+            format!(
+                "output_path must be a file path, got directory: {}",
+                output_path.display()
+            ),
+            Value::Null,
+        ));
+    }
     let parent = output_path.parent().ok_or_else(|| {
         rpc_error(
             RPC_INVALID_PARAMS,
@@ -274,7 +285,7 @@ fn run_macos(req: ScreenshotRequest) -> Result<Value, RpcError> {
         ),
     })?;
 
-    if !discovered.iter().any(|w| w.window_id == window_id) {
+    if target_bounds.is_none() {
         return Err(rpc_error(
             RPC_INVALID_PARAMS,
             codes::WINDOW_NOT_FOUND,
@@ -571,6 +582,22 @@ mod tests {
         let err = handle_screenshot(Some(&params))
             .await
             .expect_err("must reject missing parent dir");
+        assert_eq!(err.code, RPC_INVALID_PARAMS);
+        assert_eq!(
+            err_data(&err).get("error").and_then(Value::as_str),
+            Some(codes::INVALID_OUTPUT_PATH)
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_directory_output_path() {
+        let params = json!({
+            "window_id": 42_u32,
+            "output_path": std::env::temp_dir().display().to_string(),
+        });
+        let err = handle_screenshot(Some(&params))
+            .await
+            .expect_err("must reject directory output_path");
         assert_eq!(err.code, RPC_INVALID_PARAMS);
         assert_eq!(
             err_data(&err).get("error").and_then(Value::as_str),
