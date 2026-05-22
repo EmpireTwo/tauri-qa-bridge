@@ -8,6 +8,9 @@ mod handler;
 pub(crate) mod key;
 pub(crate) mod protocol;
 pub(crate) mod recorder;
+// Native screenshot capture for the `screenshot_native` JSON-RPC method.
+// macOS-only today; non-macOS callers receive `PERMISSION_DENIED`.
+pub(crate) mod screenshot;
 #[cfg(any(unix, windows))]
 pub(crate) mod server;
 

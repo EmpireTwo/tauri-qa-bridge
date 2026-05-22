@@ -248,6 +248,17 @@ impl PilotMcpServer {
                 )
                 .await
             }
+            "screenshot_native" => {
+                let mut payload = json!({
+                    "window_id": required_u32(&args, "window_id")?,
+                    "output_path": required_string(&args, "output_path")?,
+                });
+                if let Some(format) = optional_string(&args, "format")? {
+                    payload["format"] = json!(format);
+                }
+                self.call_app_tool("screenshot_native", Some(payload), window)
+                    .await
+            }
             "navigate" => {
                 self.call_app_tool(
                     "navigate",
@@ -829,6 +840,14 @@ fn tool_specs() -> Vec<ToolSpec> {
             idempotent: false,
         },
         ToolSpec {
+            name: "screenshot_native",
+            description: "Capture a native window by `window_id` and write a PNG to `output_path`. Returns path + metadata; never inlines bytes.",
+            schema: pilot_screenshot_schema,
+            read_only: false,
+            destructive: false,
+            idempotent: false,
+        },
+        ToolSpec {
             name: "scroll",
             description: "Scroll the page or an element ref.",
             schema: scroll_schema,
@@ -1091,6 +1110,11 @@ fn required_u64(args: &JsonObject, name: &str) -> Result<u64, McpError> {
     args.get(name)
         .and_then(Value::as_u64)
         .ok_or_else(|| invalid_params(format!("'{name}' is required and must be an integer")))
+}
+
+fn required_u32(args: &JsonObject, name: &str) -> Result<u32, McpError> {
+    let value = required_u64(args, name)?;
+    u32::try_from(value).map_err(|_| invalid_params(format!("'{name}' is out of range for u32")))
 }
 
 fn optional_u64(args: &JsonObject, name: &str) -> Result<Option<u64>, McpError> {
@@ -1386,6 +1410,33 @@ fn ipc_schema() -> Arc<JsonObject> {
     )
 }
 
+fn pilot_screenshot_schema() -> Arc<JsonObject> {
+    object_schema(
+        props([
+            (
+                "window_id",
+                json!({
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": u32::MAX,
+                    "description": "Native window id (e.g. `CGWindowID` on macOS) to capture. Must fit in u32.",
+                }),
+            ),
+            (
+                "output_path",
+                string_prop(
+                    "Absolute path where the PNG is written. The parent directory must already exist; the file is written atomically via a temp + rename.",
+                ),
+            ),
+            (
+                "format",
+                enum_prop("Image format. v1 accepts only \"png\".", &["png"]),
+            ),
+        ]),
+        &["window_id", "output_path"],
+    )
+}
+
 fn selector_schema() -> Arc<JsonObject> {
     object_schema(
         props([("selector", string_prop("Optional CSS selector."))]),
@@ -1634,6 +1685,7 @@ mod tests {
             "record_stop",
             "replay",
             "screenshot",
+            "screenshot_native",
             "scroll",
             "select",
             "snapshot",
@@ -1726,6 +1778,123 @@ mod tests {
                 "scroll direction enum must include {expected}"
             );
         }
+    }
+
+    #[test]
+    fn pilot_screenshot_tool_advertises_path_only_contract() {
+        let tool = cached_tools()
+            .iter()
+            .find(|t| t.name == "pilot.screenshot_native")
+            .expect("pilot.screenshot_native tool registered");
+        let props = tool
+            .input_schema
+            .get("properties")
+            .and_then(Value::as_object)
+            .expect("schema has properties");
+        for required in ["window_id", "output_path", "format"] {
+            assert!(
+                props.contains_key(required),
+                "pilot.screenshot_native must advertise `{required}` in its schema"
+            );
+        }
+        let required = tool
+            .input_schema
+            .get("required")
+            .and_then(Value::as_array)
+            .expect("required list present");
+        let required: Vec<&str> = required.iter().filter_map(Value::as_str).collect();
+        assert!(
+            required.contains(&"window_id"),
+            "pilot.screenshot_native must require `window_id`"
+        );
+        assert!(
+            required.contains(&"output_path"),
+            "pilot.screenshot_native must require `output_path`"
+        );
+        // The path-only contract forbids inline byte / base64 fields on either
+        // surface — guard against a future revision silently growing one.
+        for forbidden in ["bytes", "base64", "data"] {
+            assert!(
+                !props.contains_key(forbidden),
+                "pilot.screenshot_native must not advertise `{forbidden}` (path-only contract)"
+            );
+        }
+    }
+
+    #[test]
+    fn pilot_screenshot_tool_routes_native_method() {
+        // The native contract lives under a distinct name (`screenshot_native`
+        // advertised as `pilot.screenshot_native`) so the existing bridge
+        // `screenshot` (html-to-image, base64) keeps working for current
+        // CLI/scenario callers. This test pins the surface so a future
+        // refactor cannot silently fold the two tools together and resurrect
+        // the bytes-inline payload shape.
+        let bridge = cached_tools()
+            .iter()
+            .find(|t| t.name == "pilot.screenshot")
+            .expect("bridge pilot.screenshot tool still registered");
+        let native = cached_tools()
+            .iter()
+            .find(|t| t.name == "pilot.screenshot_native")
+            .expect("pilot.screenshot_native tool registered");
+        assert_ne!(
+            bridge.input_schema, native.input_schema,
+            "bridge `pilot.screenshot` and native `pilot.screenshot_native` advertise different schemas"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn pilot_screenshot_forwards_native_params_to_jsonrpc() {
+        let socket = std::env::temp_dir().join(format!(
+            "tauri-pilot-mcp-screenshot-native-{}.sock",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&socket);
+        let listener = UnixListener::bind(&socket).expect("bind mock socket");
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accept");
+            let (reader, mut writer) = stream.into_split();
+            let mut reader = BufReader::new(reader);
+            let mut line = String::new();
+            reader.read_line(&mut line).await.expect("read request");
+            let request: Request = serde_json::from_str(line.trim()).expect("parse request");
+            assert_eq!(request.method, "screenshot_native");
+            let params = request.params.expect("native screenshot params present");
+            assert_eq!(params["window_id"], json!(42_u64));
+            assert_eq!(params["output_path"], json!("/tmp/out.png"));
+            assert_eq!(params["format"], json!("png"));
+            let response = Response::success(
+                request.id,
+                json!({
+                    "output_path": "/tmp/out.png",
+                    "window_id": 42_u32,
+                    "width": 100_u32,
+                    "height": 50_u32,
+                    "scale_factor": 2.0_f32,
+                    "byte_size": 1234_u64,
+                    "backend": "screencapture",
+                    "tcc_denied": false,
+                }),
+            );
+            let mut bytes = serde_json::to_vec(&response).expect("serialize response");
+            bytes.push(b'\n');
+            writer.write_all(&bytes).await.expect("write response");
+        });
+
+        let pilot = PilotMcpServer::new(Some(socket.clone()), None);
+        let mut args = Map::new();
+        args.insert("window_id".to_owned(), json!(42_u32));
+        args.insert("output_path".to_owned(), json!("/tmp/out.png"));
+        args.insert("format".to_owned(), json!("png"));
+        let result = pilot
+            .call_tool_by_name("screenshot_native", args)
+            .await
+            .expect("tool call succeeds");
+        assert_eq!(result.is_error, Some(false));
+
+        server.await.expect("mock server task");
+        let _ = std::fs::remove_file(&socket);
     }
 
     #[test]
