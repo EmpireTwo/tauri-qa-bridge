@@ -49,7 +49,33 @@ Denies the __callback command without any pre-configured scope.
 </td>
 <td>
 
-Allow the internal __callback IPC command used by the eval engine
+Enables the callback command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pilot:deny-callback`
+
+</td>
+<td>
+
+Denies the callback command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`pilot:allow-callback`
+
+</td>
+<td>
+
+Allow the internal callback IPC commands used by the eval engine
 
 </td>
 </tr>

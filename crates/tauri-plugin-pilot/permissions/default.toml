@@ -2,10 +2,10 @@
 
 [[permission]]
 identifier = "allow-callback"
-description = "Allow the internal __callback IPC command used by the eval engine"
+description = "Allow the internal callback IPC commands used by the eval engine"
 
 [permission.commands]
-allow = ["__callback"]
+allow = ["callback", "__callback"]
 
 [default]
 description = "Default permissions for tauri-plugin-pilot (allows eval callback)"
