@@ -100,7 +100,7 @@ impl EvalEngine {
     #[must_use]
     pub fn wrap_script(id: u64, script: &str) -> String {
         format!(
-            "(()=>{{try{{let __r=({script});\
+            "(async()=>{{try{{let __r=await({script});\
              return {{id:{id},result:__r===undefined?'null':JSON.stringify(__r)}};\
              }}catch(__e){{return {{id:{id},error:(__e&&__e.message)||String(__e)}};}}}})();"
         )
@@ -216,6 +216,7 @@ mod tests {
         let script = EvalEngine::wrap_script(42, "document.title");
         assert!(script.contains("42"));
         assert!(script.contains("document.title"));
+        assert!(script.contains("await("));
         assert!(script.contains("return {id:42,result:"));
         assert!(script.contains("try"));
         assert!(script.contains("catch"));
