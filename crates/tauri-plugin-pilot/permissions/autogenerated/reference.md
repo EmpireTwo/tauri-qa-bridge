@@ -4,7 +4,7 @@ Default permissions for tauri-plugin-pilot (allows eval callback)
 
 #### This default permission set includes the following:
 
-- `allow-callback`
+- `allow-eval-callbacks`
 
 ## Permission Table
 
@@ -70,7 +70,7 @@ Denies the callback command without any pre-configured scope.
 <tr>
 <td>
 
-`pilot:allow-callback`
+`pilot:allow-eval-callbacks`
 
 </td>
 <td>
