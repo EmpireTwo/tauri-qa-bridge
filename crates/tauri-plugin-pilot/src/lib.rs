@@ -141,7 +141,7 @@ fn make_eval_fn<R: tauri::Runtime>(app: &tauri::AppHandle<R>, engine: EvalEngine
         let engine = engine.clone();
         #[cfg(target_os = "macos")]
         {
-            return eval_with_webkit_callback(&target, script, engine);
+            eval_with_webkit_callback(&target, script, engine)
         }
         #[cfg(not(target_os = "macos"))]
         target
