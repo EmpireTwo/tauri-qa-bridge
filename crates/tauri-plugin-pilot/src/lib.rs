@@ -158,7 +158,12 @@ fn eval_with_webkit_callback<R: tauri::Runtime>(
     script: String,
     engine: EvalEngine,
 ) -> Result<(), String> {
+    let eval_id = extract_eval_callback_id(&script);
     target
+        // SAFETY: `platform.inner()` returns the WKWebView pointer owned by wry
+        // and valid for this `with_webview` closure. `RcBlock` allocates the
+        // completion block on the heap, and WebKit copies it so the callback
+        // stays alive after this scope returns.
         .with_webview(move |platform| unsafe {
             use objc2::{AnyThread, runtime::AnyObject};
             use objc2_foundation::{
@@ -170,24 +175,43 @@ fn eval_with_webkit_callback<R: tauri::Runtime>(
             let handler =
                 block2::RcBlock::new(move |value: *mut AnyObject, error: *mut NSError| {
                     if !error.is_null() {
-                        tracing::warn!("native WebKit eval callback returned an error");
+                        resolve_native_eval_error(
+                            &engine,
+                            eval_id,
+                            "native WebKit eval callback returned an error",
+                        );
                         return;
                     }
 
-                    let mut payload = String::new();
-                    if !value.is_null()
-                        && let Ok(data) = NSJSONSerialization::dataWithJSONObject_options_error(
-                            &*value,
-                            NSJSONWritingOptions::FragmentsAllowed,
-                        )
-                        && let Some(json) = NSString::initWithData_encoding(
+                    if value.is_null() {
+                        resolve_native_eval_error(
+                            &engine,
+                            eval_id,
+                            "native WebKit eval callback returned no value",
+                        );
+                        return;
+                    }
+
+                    let Some(json) = NSJSONSerialization::dataWithJSONObject_options_error(
+                        &*value,
+                        NSJSONWritingOptions::FragmentsAllowed,
+                    )
+                    .ok()
+                    .and_then(|data| {
+                        NSString::initWithData_encoding(
                             NSString::alloc(),
                             &data,
                             NSUTF8StringEncoding,
                         )
-                    {
-                        payload = json.to_string();
-                    }
+                    }) else {
+                        resolve_native_eval_error(
+                            &engine,
+                            eval_id,
+                            "native WebKit eval callback result was not JSON serializable",
+                        );
+                        return;
+                    };
+                    let payload = json.to_string();
                     handle_eval_callback_payload(&engine, &payload);
                 });
 
@@ -195,6 +219,29 @@ fn eval_with_webkit_callback<R: tauri::Runtime>(
                 .evaluateJavaScript_completionHandler(&NSString::from_str(&script), Some(&handler));
         })
         .map_err(|e| e.to_string())
+}
+
+#[cfg(all(target_os = "macos", debug_assertions))]
+fn extract_eval_callback_id(script: &str) -> Option<u64> {
+    script
+        .split("return {id:")
+        .nth(1)?
+        .split_once(',')?
+        .0
+        .parse()
+        .ok()
+}
+
+#[cfg(all(target_os = "macos", debug_assertions))]
+fn resolve_native_eval_error(engine: &EvalEngine, id: Option<u64>, message: &str) {
+    if let Some(id) = id {
+        handler::handle_callback(engine, id, None, Some(message.to_owned()));
+    } else {
+        tracing::warn!(
+            message,
+            "native WebKit eval callback failed before resolving an id"
+        );
+    }
 }
 
 #[cfg(all(any(unix, windows), debug_assertions))]
@@ -267,7 +314,11 @@ fn make_list_fn<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> ListWindowsFn {
             .map(|(label, wv)| {
                 serde_json::json!({
                     "label": label,
-                    "url": "",
+                    "url": std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| wv.url()))
+                        .ok()
+                        .and_then(Result::ok)
+                        .map(|url| url.to_string())
+                        .unwrap_or_default(),
                     "title": wv.title().unwrap_or_default(),
                 })
             })

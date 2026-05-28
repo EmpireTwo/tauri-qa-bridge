@@ -18,9 +18,9 @@ pub(crate) enum EvalError {
 
 type PendingMap = HashMap<u64, oneshot::Sender<Result<serde_json::Value, String>>>;
 
-/// Engine for executing JS in a `WebView` and getting results via callback.
+/// Engine for executing JS in a `WebView` and resolving native eval callback results.
 ///
-/// The core ADR-001 pattern: wrap script in try/catch + invoke callback,
+/// The core ADR-001 pattern: wrap script in try/catch + return a callback payload,
 /// await the result on a oneshot channel with timeout.
 #[derive(Clone)]
 pub(crate) struct EvalEngine {
@@ -69,7 +69,7 @@ impl EvalEngine {
         (id, rx)
     }
 
-    /// Resolve a pending eval by ID. Called from the IPC __callback handler.
+    /// Resolve a pending eval by ID from a `WebView` eval callback payload.
     pub fn resolve(&self, id: u64, result: Result<serde_json::Value, String>) {
         let sender = self
             .pending
@@ -87,7 +87,7 @@ impl EvalEngine {
         }
     }
 
-    /// Wrap a user script in the ADR-001 callback pattern.
+    /// Wrap a user script so `WebView` eval callbacks receive a tagged payload.
     /// Returns a small callback payload object for `WebviewWindow::eval_with_callback`.
     /// This avoids routing eval results through JS-to-Tauri IPC, which can fail
     /// to dispatch from scripts injected with `webview.eval` on newer

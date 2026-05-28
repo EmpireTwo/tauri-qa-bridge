@@ -290,7 +290,6 @@ async fn handle_diff(
             message: msg,
             data: None,
         })?;
-    let script = ensure_bridge_script(&script);
     let (id, rx) = engine.register();
     let wrapped = EvalEngine::wrap_script(id, &script);
 
@@ -471,7 +470,6 @@ async fn handle_eval_method(
         message: msg,
         data: None,
     })?;
-    let script = ensure_bridge_script(&script);
     let (id, rx) = engine.register();
     let wrapped = EvalEngine::wrap_script(id, &script);
 
@@ -518,19 +516,6 @@ fn build_bridge_call(method: &str, params: Option<&serde_json::Value>) -> Result
     }
 
     Ok(format!("window.__PILOT__.{method}({args})"))
-}
-
-#[cfg(debug_assertions)]
-fn ensure_bridge_script(call: &str) -> String {
-    format!(
-        "(()=>{{if(!window.__PILOT__){{\n{}\n}}return ({call});}})()",
-        crate::BRIDGE_JS
-    )
-}
-
-#[cfg(not(debug_assertions))]
-fn ensure_bridge_script(call: &str) -> String {
-    call.to_owned()
 }
 
 /// Process the IPC callback from the JS bridge (ADR-001).
